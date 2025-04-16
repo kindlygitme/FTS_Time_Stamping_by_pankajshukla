@@ -2,29 +2,20 @@ import streamlit as st
 import zipfile
 import os
 import tempfile
+import moviepy.editor as mp
 import whisper
+import srt
+import datetime
 
-# Page settings
-st.set_page_config(page_title="Aakash Subtitle Tool", layout="centered")
+st.set_page_config(page_title="Welcome to Aakash", layout="centered")
+st.title("🎓 Welcome to Aakash")
+st.write("Upload a ZIP file containing videos. This app will extract transcripts (SRT) for each one.")
 
-# Show logo
-st.image("logo aksh.png", width=150)
+uploaded_zip = st.file_uploader("Upload a ZIP file with videos", type=["zip"])
 
-# Greeting & Header
-st.markdown("# 👋 Welcome to Aakash Video Subtitle Tool!")
-st.write("This tool helps you generate SRT subtitle files from educational videos.")
-st.markdown("### 🎯 How it works:")
-st.markdown("""
-1. 📁 Upload a ZIP file containing your video lectures (MP4, MKV, AVI).
-2. 🧠 We will transcribe each video using Whisper AI.
-3. 📄 Download the subtitle files (in `.srt` format) for each video.
-""")
-
-uploaded_zip = st.file_uploader("📦 Upload ZIP file containing videos", type=["zip"])
-
-if uploaded_zip is not None:
+if uploaded_zip:
     with tempfile.TemporaryDirectory() as temp_dir:
-        zip_path = os.path.join(temp_dir, "uploaded.zip")
+        zip_path = os.path.join(temp_dir, "videos.zip")
         with open(zip_path, "wb") as f:
             f.write(uploaded_zip.read())
 
@@ -37,39 +28,45 @@ if uploaded_zip is not None:
             if f.lower().endswith((".mp4", ".mkv", ".avi"))
         ]
 
+        if not video_files:
+            st.warning("No video files found in the ZIP.")
+        else:
+            st.success(f"Found {len(video_files)} video file(s). Starting transcription...")
+
         model = whisper.load_model("base")
+        srt_links = []
 
         for video_path in video_files:
-            st.markdown("---")
-            video_name = os.path.basename(video_path)
-            st.subheader(f"🎥 Processing: {video_name}")
+            st.write(f"🎬 Processing: `{os.path.basename(video_path)}`")
 
-            st.info("🔁 Generating transcript, please wait...")
-            result = model.transcribe(video_path, task="transcribe", verbose=False)
+            # Extract audio
+            audio_path = os.path.join(temp_dir, "audio.wav")
+            video = mp.VideoFileClip(video_path)
+            video.audio.write_audiofile(audio_path, verbose=False, logger=None)
+
+            # Transcribe
+            result = model.transcribe(audio_path)
 
             # Create SRT content
-            srt_lines = []
+            subtitles = []
             for i, segment in enumerate(result["segments"]):
-                start = int(segment["start"])
-                end = int(segment["end"])
-                srt_lines.append(
-                    f"{i+1}\n"
-                    f"{start//3600:02}:{(start%3600)//60:02}:{start%60:02},000 --> "
-                    f"{end//3600:02}:{(end%3600)//60:02}:{end%60:02},000\n"
-                    f"{segment['text']}\n"
-                )
-            srt_text = "\n".join(srt_lines)
+                start = datetime.timedelta(seconds=int(segment["start"]))
+                end = datetime.timedelta(seconds=int(segment["end"]))
+                content = segment["text"].strip()
+                subtitles.append(srt.Subtitle(index=i+1, start=start, end=end, content=content))
+            srt_content = srt.compose(subtitles)
 
-            # Save SRT file
-            srt_path = os.path.join(temp_dir, f"{os.path.splitext(video_name)[0]}.srt")
-            with open(srt_path, "w", encoding="utf-8") as srt_file:
-                srt_file.write(srt_text)
+            # Save SRT
+            srt_filename = os.path.basename(video_path).rsplit(".", 1)[0] + ".srt"
+            srt_path = os.path.join(temp_dir, srt_filename)
+            with open(srt_path, "w", encoding="utf-8") as f:
+                f.write(srt_content)
 
-            # Download button
-            with open(srt_path, "rb") as srt_file:
+            # Add download link
+            with open(srt_path, "rb") as f:
                 st.download_button(
-                    label=f"⬇️ Download SRT for {video_name}",
-                    data=srt_file,
-                    file_name=os.path.basename(srt_path),
+                    label=f"⬇️ Download SRT for {os.path.basename(video_path)}",
+                    data=f,
+                    file_name=srt_filename,
                     mime="text/plain"
                 )
