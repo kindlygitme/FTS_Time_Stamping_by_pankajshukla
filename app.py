@@ -29,7 +29,7 @@ if uploaded_zip:
         ]
 
         if not video_files:
-            st.warning("No video files found.")
+            st.warning("Amit BHai fir se karo.")
         else:
             st.success(f"Found {len(video_files)} video file(s). Starting transcription...")
 
