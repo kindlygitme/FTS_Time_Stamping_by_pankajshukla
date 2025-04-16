@@ -3,8 +3,7 @@ import zipfile
 import os
 import tempfile
 import re
-import moviepy.editor as mp
-import speech_recognition as sr
+import whisper
 import pandas as pd
 
 st.set_page_config(page_title="Question Timestamp Extractor", layout="centered")
@@ -25,38 +24,27 @@ if uploaded_zip is not None:
         video_files = [os.path.join(temp_dir, f) for f in os.listdir(temp_dir) if f.lower().endswith((".mp4", ".mkv", ".avi"))]
 
         all_data = []
+        model = whisper.load_model("base")
 
         for video_path in video_files:
             st.write(f"🔍 प्रोसेस कर रहे हैं: `{os.path.basename(video_path)}`")
 
-            # Convert video to audio
-            video = mp.VideoFileClip(video_path)
-            audio_path = os.path.join(temp_dir, "temp_audio.wav")
-            video.audio.write_audiofile(audio_path, verbose=False, logger=None)
+            result = model.transcribe(video_path, task="transcribe")
 
-            # Recognize audio
-            recognizer = sr.Recognizer()
-            with sr.AudioFile(audio_path) as source:
-                audio = recognizer.record(source)
-
-            try:
-                text = recognizer.recognize_google(audio)
-                matches = re.finditer(r"(question number|question|next question)\s*(\d{1,3})", text, re.IGNORECASE)
-
-                for match in matches:
+            for segment in result["segments"]:
+                text = segment["text"]
+                match = re.search(r"(question number|question|next question)\s*(\d{1,3})", text, re.IGNORECASE)
+                if match:
                     question_num = match.group(2)
-                    start_time = match.start() / 100  # Approx. estimate (rough timestamp)
+                    start_time = int(segment["start"])
                     formatted_time = "{:02d}:{:02d}:{:02d}".format(
-                        int(start_time // 3600), int((start_time % 3600) // 60), int(start_time % 60)
+                        start_time // 3600, (start_time % 3600) // 60, start_time % 60
                     )
                     all_data.append({
                         "वीडियो": os.path.basename(video_path),
                         "प्रश्न नंबर": question_num,
                         "टाइमस्टैम्प": formatted_time
                     })
-
-            except sr.UnknownValueError:
-                st.warning(f"⚠️ `{os.path.basename(video_path)}` से ऑडियो समझ नहीं आया।")
 
         if all_data:
             df = pd.DataFrame(all_data)
