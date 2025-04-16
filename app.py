@@ -6,11 +6,11 @@ import re
 import whisper
 import pandas as pd
 
-st.set_page_config(page_title="Question Timestamp Extractor", layout="centered")
-st.title("📘 Extract Question Number Timestamps from Videos")
-st.write("Please upload a ZIP file containing MP4 videos.")
+st.set_page_config(page_title="SRT + Regex Timestamp Extractor", layout="centered")
+st.title("🎬 Extract Timestamps from Video Subtitles")
+st.write("Upload a ZIP file containing MP4 videos. We'll create subtitles and let you extract timestamps using a regex.")
 
-uploaded_zip = st.file_uploader("Upload ZIP file", type=["zip"])
+uploaded_zip = st.file_uploader("Upload a ZIP file", type=["zip"])
 
 if uploaded_zip is not None:
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -21,25 +21,39 @@ if uploaded_zip is not None:
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(temp_dir)
 
-        video_files = [os.path.join(temp_dir, f) for f in os.listdir(temp_dir) if f.lower().endswith((".mp4", ".mkv", ".avi"))]
+        video_files = [
+            os.path.join(temp_dir, f)
+            for f in os.listdir(temp_dir)
+            if f.lower().endswith((".mp4", ".mkv", ".avi"))
+        ]
 
         model = whisper.load_model("base")
         all_data = []
 
         for video_path in video_files:
             st.markdown("---")
-            st.subheader(f"🎞️ {os.path.basename(video_path)}")
+            st.subheader(f"📹 {os.path.basename(video_path)}")
 
-            st.info("🎙️ Transcribing...")
-            result = model.transcribe(video_path, task="transcribe")
+            st.info("🔄 Generating SRT transcript using Whisper...")
+            result = model.transcribe(video_path, task="transcribe", verbose=False)
 
-            # Show full transcript
-            st.text_area("📝 Transcribed Text:", result["text"], height=250)
+            srt_lines = []
+            for i, segment in enumerate(result["segments"]):
+                start = int(segment["start"])
+                end = int(segment["end"])
+                srt_lines.append(
+                    f"{i+1}\n"
+                    f"{start//3600:02}:{(start%3600)//60:02}:{start%60:02},000 --> "
+                    f"{end//3600:02}:{(end%3600)//60:02}:{end%60:02},000\n"
+                    f"{segment['text']}\n"
+                )
 
-            # User input regex pattern
+            srt_text = "\n".join(srt_lines)
+            st.text_area("📄 SRT Transcript Preview", srt_text, height=250)
+
             user_regex = st.text_input(
-                f"🔍 Enter your regex pattern (e.g., `(question|prashn).{{0,10}}(\\d{{1,3}})`)", 
-                key=video_path
+                f"🔍 Enter regex to match question patterns (e.g. `(question|prashn).{{0,10}}(\\d{{1,3}})`)",
+                key=video_path,
             )
 
             if user_regex:
@@ -54,7 +68,9 @@ if uploaded_zip is not None:
 
                         start_time = int(segment["start"])
                         formatted_time = "{:02d}:{:02d}:{:02d}".format(
-                            start_time // 3600, (start_time % 3600) // 60, start_time % 60
+                            start_time // 3600,
+                            (start_time % 3600) // 60,
+                            start_time % 60,
                         )
                         all_data.append({
                             "Video": os.path.basename(video_path),
@@ -63,18 +79,18 @@ if uploaded_zip is not None:
                         })
                         matches_found += 1
 
-                st.success(f"✅ {matches_found} matches found!")
+                st.success(f"✅ {matches_found} matches found.")
 
-        # Final output
         if all_data:
-            df = pd.DataFrame(all_data)
             st.markdown("---")
-            st.success("🎉 Timestamps extracted successfully!")
+            df = pd.DataFrame(all_data)
+            st.success("🎉 Final extracted data:")
             st.dataframe(df)
 
-            csv_path = os.path.join(temp_dir, "timestamps.csv")
+            csv_path = os.path.join(temp_dir, "results.csv")
             df.to_csv(csv_path, index=False)
+
             with open(csv_path, "rb") as f:
                 st.download_button("⬇️ Download CSV", data=f, file_name="timestamps.csv", mime="text/csv")
         else:
-            st.warning("❌ No matches found with the given regex.")
+            st.warning("⚠️ No matches found in any file.")
