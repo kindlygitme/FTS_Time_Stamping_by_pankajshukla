@@ -2,16 +2,16 @@ import streamlit as st
 import zipfile
 import os
 import tempfile
-import moviepy.editor as mp
 import whisper
 import srt
 import datetime
 
-st.set_page_config(page_title="Welcome to Aakash", layout="centered")
-st.title("🎓 Welcome to Aakash")
-st.write("Upload a ZIP file containing videos. This app will extract transcripts (SRT) for each one.")
+st.set_page_config(page_title="Aakash Subtitle Tool", layout="centered")
 
-uploaded_zip = st.file_uploader("Upload a ZIP file with videos", type=["zip"])
+st.title("👋 Welcome to Aakash Subtitle Tool")
+st.write("Upload a ZIP file of MP4 videos. We’ll transcribe each one and give you `.srt` subtitle files.")
+
+uploaded_zip = st.file_uploader("📦 Upload ZIP file with videos", type=["zip"])
 
 if uploaded_zip:
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -29,23 +29,19 @@ if uploaded_zip:
         ]
 
         if not video_files:
-            st.warning("No video files found in the ZIP.")
+            st.warning("No video files found.")
         else:
             st.success(f"Found {len(video_files)} video file(s). Starting transcription...")
 
         model = whisper.load_model("base")
-        srt_links = []
 
         for video_path in video_files:
-            st.write(f"🎬 Processing: `{os.path.basename(video_path)}`")
+            st.markdown("---")
+            video_name = os.path.basename(video_path)
+            st.subheader(f"🎥 Processing: {video_name}")
 
-            # Extract audio
-            audio_path = os.path.join(temp_dir, "audio.wav")
-            video = mp.VideoFileClip(video_path)
-            video.audio.write_audiofile(audio_path, verbose=False, logger=None)
-
-            # Transcribe
-            result = model.transcribe(audio_path)
+            st.info("🔁 Transcribing with Whisper...")
+            result = model.transcribe(video_path)
 
             # Create SRT content
             subtitles = []
@@ -56,16 +52,15 @@ if uploaded_zip:
                 subtitles.append(srt.Subtitle(index=i+1, start=start, end=end, content=content))
             srt_content = srt.compose(subtitles)
 
-            # Save SRT
-            srt_filename = os.path.basename(video_path).rsplit(".", 1)[0] + ".srt"
+            # Save SRT file
+            srt_filename = os.path.splitext(video_name)[0] + ".srt"
             srt_path = os.path.join(temp_dir, srt_filename)
             with open(srt_path, "w", encoding="utf-8") as f:
                 f.write(srt_content)
 
-            # Add download link
             with open(srt_path, "rb") as f:
                 st.download_button(
-                    label=f"⬇️ Download SRT for {os.path.basename(video_path)}",
+                    label=f"⬇️ Download SRT for {video_name}",
                     data=f,
                     file_name=srt_filename,
                     mime="text/plain"
