@@ -9,22 +9,20 @@ from pydub import AudioSegment
 
 st.set_page_config(page_title="Transcript Generator", layout="centered")
 st.title("🎬 Video Transcript to SRT Generator")
-st.write("Upload a ZIP file containing videos. We'll generate `.srt` transcript files for manual timestamping.")
+st.write("Upload a ZIP file containing videos. We'll generate `.srt` transcript files for manual timestamping and display them below.")
 
 uploaded_zip = st.file_uploader("📦 Upload ZIP file (MP4/MKV/AVI)", type=["zip"])
 
 if uploaded_zip:
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Save uploaded zip
         zip_path = os.path.join(temp_dir, "videos.zip")
         with open(zip_path, "wb") as f:
             f.write(uploaded_zip.read())
 
-        # Extract contents
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(temp_dir)
 
-        # Find all video files recursively
+        # Recursively find videos
         video_files = []
         for root, dirs, files in os.walk(temp_dir):
             for file in files:
@@ -45,7 +43,6 @@ if uploaded_zip:
 
             st.info("🔁 Extracting audio and transcribing...")
 
-            # Convert video to audio using pydub
             audio_path = os.path.join(temp_dir, "temp_audio.wav")
             try:
                 audio = AudioSegment.from_file(video_path)
@@ -65,6 +62,10 @@ if uploaded_zip:
                 content = segment["text"].strip()
                 subtitles.append(srt.Subtitle(index=i+1, start=start, end=end, content=content))
             srt_text = srt.compose(subtitles)
+
+            # Show SRT content on screen
+            with st.expander("📄 View Transcript (SRT Format)"):
+                st.text(srt_text)
 
             # Save SRT
             srt_filename = os.path.splitext(video_name)[0] + ".srt"
