@@ -1,5 +1,7 @@
 streamlit
-moviepy
 openai-whisper
 srt
+pydub
+pandas
+openpyxl
 ffmpeg-python
